@@ -1,0 +1,78 @@
+# FEMS — Docker Compose (MongoDB data stored on your PC in ./docker-data/mongodb)
+#
+# Usage:
+#   docker compose up -d --build
+#   docker compose exec backend npm run seed   # first time only
+#
+# App: http://localhost:5173  |  API: http://localhost:5000  |  Swagger: http://localhost:5000/api-docs
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: fems-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./docker-data/mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fems-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017/fems
+      FRONTEND_URL: http://localhost:5173
+      # All microservices run in this container — keep localhost URLs
+      AUTH_SERVICE_URL: http://127.0.0.1:5001
+      EXTINGUISHER_SERVICE_URL: http://127.0.0.1:5002
+      INSPECTION_SERVICE_URL: http://127.0.0.1:5003
+      REPORT_SERVICE_URL: http://127.0.0.1:5004
+      NOTIFICATION_SERVICE_URL: http://127.0.0.1:5005
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+      - "5002:5002"
+      - "5003:5003"
+      - "5004:5004"
+      - "5005:5005"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://127.0.0.1:5000/health",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5000/api/v1
+    container_name: fems-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy

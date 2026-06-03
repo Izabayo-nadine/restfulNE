@@ -1,0 +1,29 @@
+{
+  "name": "fems-backend",
+  "version": "2.0.0",
+  "description": "FEMS — Microservices backend with API Gateway",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "gateway",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n gateway,auth,ext,insp,report,notif -c blue,green,yellow,magenta,cyan,white \"npm run dev -w @fems/api-gateway\" \"npm run dev -w @fems/auth-service\" \"npm run dev -w @fems/extinguisher-service\" \"npm run dev -w @fems/inspection-service\" \"npm run dev -w @fems/report-service\" \"npm run dev -w @fems/notification-service\"",
+    "start": "concurrently -n gateway,auth,ext,insp,report,notif \"npm run start -w @fems/api-gateway\" \"npm run start -w @fems/auth-service\" \"npm run start -w @fems/extinguisher-service\" \"npm run start -w @fems/inspection-service\" \"npm run start -w @fems/report-service\" \"npm run start -w @fems/notification-service\"",
+    "seed": "node scripts/seed.js",
+    "kill-ports": "powershell -ExecutionPolicy Bypass -File scripts/kill-ports.ps1",
+    "test-smtp": "node scripts/test-smtp.js",
+    "dev:gateway": "npm run dev -w @fems/api-gateway",
+    "dev:monolith": "node src/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "mongoose": "^8.7.0"
+  }
+}

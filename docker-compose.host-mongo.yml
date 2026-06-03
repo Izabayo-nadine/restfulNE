@@ -1,0 +1,54 @@
+# Use MongoDB already installed on your PC (database "fems" on port 27017).
+# Does NOT start a mongo container — data stays in your existing local MongoDB files.
+#
+#   docker compose -f docker-compose.host-mongo.yml up -d --build
+#
+# Stop fems-mongo first if you used the default compose file before.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fems-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://host.docker.internal:27017/fems
+      FRONTEND_URL: http://localhost:5173
+      AUTH_SERVICE_URL: http://127.0.0.1:5001
+      EXTINGUISHER_SERVICE_URL: http://127.0.0.1:5002
+      INSPECTION_SERVICE_URL: http://127.0.0.1:5003
+      REPORT_SERVICE_URL: http://127.0.0.1:5004
+      NOTIFICATION_SERVICE_URL: http://127.0.0.1:5005
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+      - "5002:5002"
+      - "5003:5003"
+      - "5004:5004"
+      - "5005:5005"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5000/api/v1
+    container_name: fems-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
