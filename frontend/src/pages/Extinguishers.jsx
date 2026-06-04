@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
-import { extinguisherApi } from '../api/services';
+import { authApi, extinguisherApi, fetchAllPages } from '../api/services';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 import Pagination from '../components/Pagination';
@@ -8,10 +8,34 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import Alert, { FieldErrors } from '../components/Alert';
 import { emptyExtinguisherForm } from '../utils/forms';
 
+function companyLabel(user) {
+  return `${user.firstName} ${user.lastName} (${user.email})`;
+}
+
+function companyFromItem(item) {
+  const s = item.companySnapshot;
+  if (!s) return '—';
+  return `${s.firstName} ${s.lastName}`;
+}
+
+function extinguisherPayload(form) {
+  return {
+    serialNumber: form.serialNumber,
+    location: form.location,
+    type: form.type,
+    size: form.size,
+    installationDate: form.installationDate,
+    expiryDate: form.expiryDate,
+    status: form.status,
+    assignedTo: form.assignedTo,
+  };
+}
+
 export default function Extinguishers() {
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
   const { config } = useConfig();
   const pageLimit = config?.pagination?.defaultLimit ?? 10;
+  const listAllLimit = config?.pagination?.maxLimit ?? 100;
   const types = config?.extinguisher?.types ?? [];
   const sizes = config?.extinguisher?.sizes ?? [];
   const statuses = config?.extinguisher?.statuses ?? [];
@@ -24,6 +48,7 @@ export default function Extinguishers() {
   const [deleteId, setDeleteId] = useState(null);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState(null);
+  const [companies, setCompanies] = useState([]);
 
   const load = () => {
     extinguisherApi
@@ -39,6 +64,13 @@ export default function Extinguishers() {
     load();
   }, [page, search, pageLimit]);
 
+  useEffect(() => {
+    if (!hasRole('admin')) return;
+    fetchAllPages(authApi.listUsers, { limit: listAllLimit, role: 'user' })
+      .then((list) => setCompanies(list.filter((u) => u.isActive !== false)))
+      .catch(() => setCompanies([]));
+  }, [listAllLimit]);
+
   const openCreate = () => {
     setForm(emptyExtinguisherForm(config));
     setModal('create');
@@ -48,7 +80,13 @@ export default function Extinguishers() {
 
   const openEdit = (item) => {
     setForm({
-      ...item,
+      ...emptyExtinguisherForm(config),
+      serialNumber: item.serialNumber,
+      location: item.location,
+      type: item.type,
+      size: item.size,
+      status: item.status,
+      assignedTo: item.assignedTo?.toString?.() || item.assignedTo || '',
       installationDate: item.installationDate?.slice(0, 10),
       expiryDate: item.expiryDate?.slice(0, 10),
     });
@@ -61,10 +99,11 @@ export default function Extinguishers() {
     setError(null);
     setFieldErrors(null);
     try {
+      const payload = extinguisherPayload(form);
       if (modal === 'create') {
-        await extinguisherApi.create(form);
+        await extinguisherApi.create(payload);
       } else {
-        await extinguisherApi.update(modal, form);
+        await extinguisherApi.update(modal, payload);
       }
       setModal(null);
       load();
@@ -85,9 +124,11 @@ export default function Extinguishers() {
     }
   };
 
-  const canEdit = hasRole('admin', 'inspector');
+  const canEdit = hasRole('admin');
   const canDelete = hasRole('admin');
   const isViewOnly = !canEdit;
+  const showCompanyColumn = user?.role !== 'user';
+  const colCount = 5 + (showCompanyColumn ? 1 : 0) + (canEdit || canDelete ? 1 : 0);
 
   return (
     <div>
@@ -95,9 +136,11 @@ export default function Extinguishers() {
         <div>
           <h2 className="text-2xl font-bold">Fire Extinguishers</h2>
           <p className="text-sm text-slate-600">
-            {isViewOnly
-              ? 'View extinguisher status, location, and expiry for your facility.'
-              : 'Register and manage extinguisher inventory.'}
+            {user?.role === 'inspector'
+              ? 'View extinguisher inventory (read-only).'
+              : isViewOnly
+                ? 'View extinguisher status, location, and expiry for your facility.'
+                : 'Register extinguishers and assign each to a facility company managed by TZW Ltd.'}
           </p>
         </div>
         {canEdit && (
@@ -124,6 +167,7 @@ export default function Extinguishers() {
           <thead>
             <tr className="border-b text-slate-600">
               <th className="pb-3 pr-4">Serial</th>
+              {showCompanyColumn && <th className="pb-3 pr-4">Company</th>}
               <th className="pb-3 pr-4">Location</th>
               <th className="pb-3 pr-4">Type</th>
               <th className="pb-3 pr-4">Status</th>
@@ -134,7 +178,7 @@ export default function Extinguishers() {
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={canEdit || canDelete ? 6 : 5} className="py-8 text-center text-slate-500">
+                <td colSpan={colCount} className="py-8 text-center text-slate-500">
                   No extinguishers found.
                 </td>
               </tr>
@@ -142,6 +186,7 @@ export default function Extinguishers() {
             {items.map((item) => (
               <tr key={item._id} className="border-b border-slate-100">
                 <td className="py-3 font-medium">{item.serialNumber}</td>
+                {showCompanyColumn && <td className="py-3">{companyFromItem(item)}</td>}
                 <td className="py-3">{item.location}</td>
                 <td className="py-3">{item.type}</td>
                 <td className="py-3">
@@ -194,6 +239,27 @@ export default function Extinguishers() {
             <form className="mt-4 space-y-3" onSubmit={handleSave}>
               {error && <Alert>{error}</Alert>}
               <FieldErrors errors={fieldErrors} />
+              {canEdit && (
+                <div>
+                  <label className="label">Facility company</label>
+                  <select
+                    className="input-field"
+                    required
+                    value={form.assignedTo}
+                    onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
+                  >
+                    <option value="">Select company account…</option>
+                    {companies.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {companyLabel(c)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Each facility user represents a company managed by TZW Ltd.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="label">Serial number</label>
                 <input className="input-field" required value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />

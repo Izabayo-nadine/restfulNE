@@ -22,7 +22,7 @@ export const scheduleInspection = asyncHandler(async (req, res) => {
     inspectionTime: req.body.inspectionTime,
     assignedInspector: req.body.assignedInspector,
     scheduledBy: req.user._id,
-    status: 'scheduled',
+    status: 'not_started',
     extinguisherSnapshot: {
       serialNumber: extinguisher.serialNumber,
       location: extinguisher.location,
@@ -80,6 +80,9 @@ export const completeInspection = asyncHandler(async (req, res) => {
   if (!inspection) throw new AppError('Inspection not found', 404);
   if (inspection.status === 'completed') {
     throw new AppError('Inspection is already completed', 400);
+  }
+  if (!['not_started', 'scheduled', 'overdue', 'cancelled'].includes(inspection.status)) {
+    throw new AppError('Inspection cannot be completed in its current state', 400);
   }
   const performedDate = new Date(req.body.performedDate);
   if (Number.isNaN(performedDate.getTime())) {

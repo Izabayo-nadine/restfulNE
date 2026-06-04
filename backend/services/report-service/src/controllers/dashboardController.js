@@ -9,15 +9,10 @@ import {
   getDashboardPreviewLimit,
   getReportRecentLimit,
   getReportUpcomingLimit,
+  INSPECTION_NOT_STARTED_STATUSES,
 } from '@fems/shared';
 
-async function markOverdueInspections() {
-  const now = new Date();
-  await Inspection.updateMany(
-    { status: 'scheduled', inspectionDate: { $lt: now } },
-    { $set: { status: 'overdue' } }
-  );
-}
+const notStartedStatus = { $in: INSPECTION_NOT_STARTED_STATUSES };
 
 function userObjectId(userId) {
   return userId;
@@ -25,7 +20,6 @@ function userObjectId(userId) {
 
 /** Role-scoped dashboard stats and summary lists — all counts from MongoDB. */
 export const dashboardReport = asyncHandler(async (req, res) => {
-  await markOverdueInspections();
   const now = new Date();
   const userId = userObjectId(req.user.id || req.user._id);
   const role = req.user.role;
@@ -46,8 +40,12 @@ export const dashboardReport = asyncHandler(async (req, res) => {
       myInspections,
     ] = await Promise.all([
       FireExtinguisher.countDocuments(extFilter),
-      Inspection.countDocuments({ ...inspFilter, status: 'scheduled' }),
-      Inspection.countDocuments({ ...inspFilter, status: 'overdue' }),
+      Inspection.countDocuments({ ...inspFilter, status: notStartedStatus }),
+      Inspection.countDocuments({
+        ...inspFilter,
+        status: notStartedStatus,
+        inspectionDate: { $lt: now },
+      }),
       Inspection.countDocuments({ ...inspFilter, status: 'completed' }),
       FireExtinguisher.find(extFilter)
         .sort('-updatedAt')
@@ -55,7 +53,7 @@ export const dashboardReport = asyncHandler(async (req, res) => {
         .select('serialNumber location status expiryDate'),
       Inspection.find({
         ...inspFilter,
-        status: { $in: ['scheduled', 'overdue'] },
+        status: notStartedStatus,
         inspectionDate: { $gte: now },
       })
         .sort('inspectionDate')
@@ -102,16 +100,19 @@ export const dashboardReport = asyncHandler(async (req, res) => {
     activeCount,
   ] = await Promise.all([
     FireExtinguisher.countDocuments(),
-    Inspection.countDocuments({ status: 'scheduled' }),
+    Inspection.countDocuments({ status: notStartedStatus }),
     Inspection.countDocuments({ status: 'completed' }),
-    Inspection.countDocuments({ status: 'overdue' }),
+    Inspection.countDocuments({
+      status: notStartedStatus,
+      inspectionDate: { $lt: now },
+    }),
     FireExtinguisher.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }]),
     FireExtinguisher.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
     FireExtinguisher.find()
       .sort('-createdAt')
       .limit(getReportRecentLimit())
       .select('serialNumber location status'),
-    Inspection.find({ status: 'scheduled', inspectionDate: { $gte: now } })
+    Inspection.find({ status: notStartedStatus, inspectionDate: { $gte: now } })
       .sort('inspectionDate')
       .limit(getReportUpcomingLimit()),
     FireExtinguisher.find({ expiryDate: { $lt: now } }).select(

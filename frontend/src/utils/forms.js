@@ -12,6 +12,7 @@ export function emptyExtinguisherForm(config) {
     installationDate: "",
     expiryDate: "",
     status: statuses.includes("active") ? "active" : statuses[0] || "",
+    assignedTo: "",
   };
 }
 

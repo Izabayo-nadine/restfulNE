@@ -23,7 +23,7 @@ const schema = new mongoose.Schema(
     expiryDate: { type: Date, required: true },
     status: { type: String, enum: EXTINGUISHER_STATUSES, default: "active" },
     registeredBy: { type: mongoose.Schema.Types.ObjectId },
-    assignedTo: { type: mongoose.Schema.Types.ObjectId },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, required: true },
     companySnapshot: {
       firstName: String,
       lastName: String,

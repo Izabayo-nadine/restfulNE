@@ -1,3 +1,5 @@
+import { AppError } from '../utils/AppError.js';
+
 const EXTINGUISHER_URL =
   process.env.EXTINGUISHER_SERVICE_URL || 'http://localhost:5002';
 
@@ -33,12 +35,13 @@ export async function deleteExtinguishersByUser(userId, logger) {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       logger.warn('Extinguisher cascade delete failed', { userId, status: res.status, text });
-      return { deletedCount: 0, extinguisherIds: [] };
+      throw new AppError('Failed to remove extinguishers for this company', 502);
     }
     const json = await res.json();
     return json.data || { deletedCount: 0, extinguisherIds: [] };
   } catch (err) {
+    if (err instanceof AppError) throw err;
     logger.warn('Extinguisher service unreachable for cascade delete', { userId, error: err.message });
-    return { deletedCount: 0, extinguisherIds: [] };
+    throw new AppError('Extinguisher service unavailable; user was not deleted', 503);
   }
 }

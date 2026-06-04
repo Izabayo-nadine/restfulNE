@@ -17,6 +17,11 @@ export const createExtinguisherValidator = [
   body("installationDate").isISO8601(),
   body("expiryDate").isISO8601(),
   body("status").optional().isIn(EXTINGUISHER_STATUSES),
+  body("assignedTo")
+    .notEmpty()
+    .withMessage("Assign the extinguisher to a facility company account")
+    .isMongoId()
+    .withMessage("Invalid company user"),
 ];
 
 export const updateExtinguisherValidator = [
@@ -28,4 +33,5 @@ export const updateExtinguisherValidator = [
   body("installationDate").optional().isISO8601(),
   body("expiryDate").optional().isISO8601(),
   body("status").optional().isIn(EXTINGUISHER_STATUSES),
+  body("assignedTo").optional().isMongoId().withMessage("Invalid company user"),
 ];

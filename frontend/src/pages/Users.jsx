@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { UserPlus } from 'lucide-react';
+import { Trash2, UserPlus } from 'lucide-react';
 import { authApi } from '../api/services';
 import { useConfig } from '../context/ConfigContext';
 import Pagination from '../components/Pagination';
+import ConfirmDialog from '../components/ConfirmDialog';
 import Alert, { FieldErrors } from '../components/Alert';
 import PasswordField from '../components/PasswordField';
 
@@ -25,6 +26,7 @@ export default function Users() {
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState(null);
   const [message, setMessage] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = () => {
     authApi.listUsers({ page, limit: pageLimit }).then((res) => {
@@ -58,6 +60,24 @@ export default function Users() {
     }
   };
 
+  const handleDeleteCompany = async () => {
+    if (!deleteTarget) return;
+    setError(null);
+    try {
+      const res = await authApi.deleteUser(deleteTarget._id);
+      const data = res.data?.data;
+      setMessage(
+        res.data?.message ||
+          `Company account deleted. Removed ${data?.extinguishersRemoved ?? 0} extinguisher(s) and ${data?.inspectionsRemoved ?? 0} inspection(s).`
+      );
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      setError(err.message);
+      setDeleteTarget(null);
+    }
+  };
+
   const roleBadge = (role) => {
     const styles = {
       admin: 'bg-brand-100 text-brand-800',
@@ -77,7 +97,8 @@ export default function Users() {
         <div>
           <h2 className="text-2xl font-bold">User management</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Register inspector accounts. Facility users register themselves on the public sign-up page.
+            Register inspector accounts. Facility users (companies) sign up on the public page; deleting a
+            company removes all of its extinguishers and inspections.
           </p>
         </div>
         <button type="button" className="btn-primary" onClick={() => { setModal(true); setError(null); setMessage(null); }}>
@@ -86,7 +107,16 @@ export default function Users() {
         </button>
       </div>
 
-      {message && <div className="mt-4"><Alert type="success">{message}</Alert></div>}
+      {message && (
+        <div className="mt-4">
+          <Alert type="success">{message}</Alert>
+        </div>
+      )}
+      {error && !modal && !deleteTarget && (
+        <div className="mt-4">
+          <Alert>{error}</Alert>
+        </div>
+      )}
 
       <div className="card mt-6 overflow-x-auto">
         <table className="w-full text-sm">
@@ -96,12 +126,15 @@ export default function Users() {
               <th className="pb-3 text-left">Email</th>
               <th className="pb-3 text-left">Role</th>
               <th className="pb-3 text-left">Status</th>
+              <th className="pb-3 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
               <tr key={u._id} className="border-b">
-                <td className="py-3">{u.firstName} {u.lastName}</td>
+                <td className="py-3">
+                  {u.firstName} {u.lastName}
+                </td>
                 <td className="py-3">{u.email}</td>
                 <td className="py-3">{roleBadge(u.role)}</td>
                 <td className="py-3">
@@ -116,6 +149,24 @@ export default function Users() {
                       />
                       <span>{u.isActive !== false ? 'Active' : 'Inactive'}</span>
                     </label>
+                  )}
+                </td>
+                <td className="py-3">
+                  {u.role === 'user' ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                      onClick={() => {
+                        setDeleteTarget(u);
+                        setMessage(null);
+                        setError(null);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete company
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
                   )}
                 </td>
               </tr>
@@ -157,13 +208,31 @@ export default function Users() {
                 hint="Min 8 characters with upper, lower, and number."
               />
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="btn-secondary" onClick={() => setModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Create inspector</button>
+                <button type="button" className="btn-secondary" onClick={() => setModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Create inspector
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete facility company"
+        message={
+          deleteTarget
+            ? `Delete ${deleteTarget.firstName} ${deleteTarget.lastName} (${deleteTarget.email})? All extinguishers assigned to this company and their inspections will be permanently removed.`
+            : ''
+        }
+        confirmLabel="Delete company"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteCompany}
+      />
     </div>
   );
 }

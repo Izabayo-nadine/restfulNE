@@ -10,11 +10,14 @@ export const EXTINGUISHER_STATUSES = [
   "decommissioned",
 ];
 
-export const INSPECTION_STATUSES = [
+export const INSPECTION_STATUSES = ["not_started", "completed"];
+
+/** Older records may still use these values until re-seeded or completed. */
+export const INSPECTION_NOT_STARTED_STATUSES = [
+  "not_started",
   "scheduled",
-  "completed",
-  "cancelled",
   "overdue",
+  "cancelled",
 ];
 
 export const USER_ROLES = ["admin", "inspector", "user"];
@@ -207,6 +210,7 @@ export const STATUS_PILL_STYLES = {
   active: "bg-emerald-100 text-emerald-800",
   inactive: "bg-slate-100 text-slate-700",
   maintenance: "bg-amber-100 text-amber-800",
+  not_started: "bg-blue-100 text-blue-800",
   scheduled: "bg-blue-100 text-blue-800",
   completed: "bg-emerald-100 text-emerald-800",
   overdue: "bg-red-100 text-red-800",

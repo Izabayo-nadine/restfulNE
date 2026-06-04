@@ -21,8 +21,10 @@ function inspectionLocation(item) {
   return item.extinguisherSnapshot?.location || '—';
 }
 
-function statusBadgeClass(status) {
+function statusBadgeClass(status, pillStyles = {}) {
+  if (pillStyles[status]) return pillStyles[status];
   const map = {
+    not_started: 'bg-blue-100 text-blue-800',
     scheduled: 'bg-blue-100 text-blue-800',
     completed: 'bg-emerald-100 text-emerald-800',
     overdue: 'bg-red-100 text-red-800',
@@ -31,13 +33,24 @@ function statusBadgeClass(status) {
   return map[status] || 'bg-slate-100 text-slate-700';
 }
 
+function formatStatusLabel(status) {
+  if (!status) return '—';
+  if (['scheduled', 'overdue', 'cancelled'].includes(status)) return 'not started';
+  return status.replace(/_/g, ' ');
+}
+
+function isIncompleteInspection(status) {
+  return status !== 'completed';
+}
+
 export default function Inspections() {
   const { user, hasRole } = useAuth();
   const { config } = useConfig();
   const pageLimit = config?.pagination?.defaultLimit ?? 10;
   const listAllLimit = config?.pagination?.maxLimit ?? 100;
+  const pillStyles = config?.statusPillStyles ?? {};
   const canComplete = hasRole('inspector', 'admin');
-  const canSchedule = hasRole('admin', 'inspector', 'user');
+  const canSchedule = hasRole('admin', 'user');
 
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState(null);
@@ -46,7 +59,11 @@ export default function Inspections() {
   const [modal, setModal] = useState(false);
   const [completeId, setCompleteId] = useState(null);
   const [form, setForm] = useState(emptyInspectionForm);
-  const [completeForm, setCompleteForm] = useState({ result: '', notes: '' });
+  const [completeForm, setCompleteForm] = useState({
+    performedDate: new Date().toISOString().slice(0, 10),
+    result: '',
+    notes: '',
+  });
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -105,7 +122,11 @@ export default function Inspections() {
     try {
       await inspectionApi.complete(completeId, completeForm);
       setCompleteId(null);
-      setCompleteForm({ result: '', notes: '' });
+      setCompleteForm({
+        performedDate: new Date().toISOString().slice(0, 10),
+        result: '',
+        notes: '',
+      });
       setSuccessMsg('Inspection marked as completed.');
       load();
     } catch (err) {
@@ -121,7 +142,9 @@ export default function Inspections() {
           <p className="mt-1 text-sm text-slate-600">
             {user?.role === 'user'
               ? 'Schedule inspections for your facility and track their status.'
-              : 'Schedule and complete fire extinguisher inspections.'}
+              : user?.role === 'inspector'
+                ? 'Complete scheduled inspections and record the date performed.'
+                : 'Schedule and complete fire extinguisher inspections.'}
           </p>
         </div>
         {canSchedule && (
@@ -151,6 +174,7 @@ export default function Inspections() {
               <th className="pb-3 text-left">Date</th>
               <th className="pb-3 text-left">Time</th>
               <th className="pb-3 text-left">Status</th>
+              {canComplete && <th className="pb-3 text-left">Performed</th>}
               {canComplete && <th className="pb-3 text-left">Result</th>}
               <th className="pb-3 text-left">{canComplete ? 'Actions' : 'Next step'}</th>
             </tr>
@@ -158,7 +182,7 @@ export default function Inspections() {
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={canComplete ? 7 : 6} className="py-8 text-center text-slate-500">
+                <td colSpan={canComplete ? 8 : 6} className="py-8 text-center text-slate-500">
                   No inspections yet.
                   {canSchedule && ' Use “Schedule inspection” to create one.'}
                 </td>
@@ -171,21 +195,28 @@ export default function Inspections() {
                 <td className="py-3">{formatDate(i.inspectionDate)}</td>
                 <td className="py-3">{i.inspectionTime || '—'}</td>
                 <td className="py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs capitalize ${statusBadgeClass(i.status)}`}>
-                    {i.status}
+                  <span className={`rounded-full px-2 py-0.5 text-xs capitalize ${statusBadgeClass(i.status, pillStyles)}`}>
+                    {formatStatusLabel(i.status)}
                   </span>
                 </td>
+                {canComplete && (
+                  <td className="py-3">{formatDate(i.performedDate || i.completedAt)}</td>
+                )}
                 {canComplete && (
                   <td className="py-3">{i.result || '—'}</td>
                 )}
                 <td className="py-3">
-                  {canComplete && i.status !== 'completed' ? (
+                  {canComplete && isIncompleteInspection(i.status) ? (
                     <button
                       type="button"
                       className="btn-secondary !py-1 !px-2 text-xs"
                       onClick={() => {
                         setCompleteId(i._id);
-                        setCompleteForm({ result: '', notes: '' });
+                        setCompleteForm({
+                          performedDate: new Date().toISOString().slice(0, 10),
+                          result: '',
+                          notes: '',
+                        });
                       }}
                     >
                       <CheckCircle className="h-3 w-3" /> Complete
@@ -271,6 +302,19 @@ export default function Inspections() {
             <h3 className="font-bold">Complete inspection</h3>
             <form className="mt-4 space-y-3" onSubmit={complete}>
               {error && <Alert>{error}</Alert>}
+              <div>
+                <label className="label">Date inspection was performed</label>
+                <input
+                  type="date"
+                  className="input-field"
+                  required
+                  max={today}
+                  value={completeForm.performedDate}
+                  onChange={(e) =>
+                    setCompleteForm({ ...completeForm, performedDate: e.target.value })
+                  }
+                />
+              </div>
               <div>
                 <label className="label">Result</label>
                 <input

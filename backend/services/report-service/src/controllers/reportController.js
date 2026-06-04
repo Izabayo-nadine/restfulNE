@@ -13,7 +13,10 @@ import {
   getDefaultInventoryPeriod,
   getReportRecentLimit,
   getReportUpcomingLimit,
+  INSPECTION_NOT_STARTED_STATUSES,
 } from "@fems/shared";
+
+const notStartedStatus = { $in: INSPECTION_NOT_STARTED_STATUSES };
 
 function periodRange(period) {
   const now = new Date();
@@ -55,15 +58,14 @@ export const inventoryReport = asyncHandler(async (req, res) => {
 
 export const inspectionReport = asyncHandler(async (req, res) => {
   const now = new Date();
-  await Inspection.updateMany(
-    { status: "scheduled", inspectionDate: { $lt: now } },
-    { $set: { status: "overdue" } },
-  );
   const [pending, completed, overdue, upcoming] = await Promise.all([
-    Inspection.countDocuments({ status: "scheduled" }),
+    Inspection.countDocuments({ status: notStartedStatus }),
     Inspection.countDocuments({ status: "completed" }),
-    Inspection.countDocuments({ status: "overdue" }),
-    Inspection.find({ status: "scheduled", inspectionDate: { $gte: now } })
+    Inspection.countDocuments({
+      status: notStartedStatus,
+      inspectionDate: { $lt: now },
+    }),
+    Inspection.find({ status: notStartedStatus, inspectionDate: { $gte: now } })
       .sort("inspectionDate")
       .limit(getReportUpcomingLimit()),
   ]);

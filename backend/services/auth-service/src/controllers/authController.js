@@ -157,8 +157,8 @@ export const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError('User not found', 404);
   if (user.role === 'admin') throw new AppError('Admin accounts cannot be deleted', 403);
-  if (user.role === 'inspector') {
-    throw new AppError('Use deactivation for inspector accounts. Only facility users can be deleted.', 400);
+  if (user.role !== 'user') {
+    throw new AppError('Only facility company accounts can be deleted. Deactivate inspectors instead.', 400);
   }
 
   const { deletedCount, extinguisherIds } = await deleteExtinguishersByUser(user._id.toString(), logger);

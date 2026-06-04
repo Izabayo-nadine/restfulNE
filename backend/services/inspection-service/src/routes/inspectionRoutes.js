@@ -22,6 +22,12 @@ router.post(
   validate,
   ctrl.scheduleInspection
 );
-router.patch('/:id/complete', authorize('inspector'), completeInspectionValidator, validate, ctrl.completeInspection);
+router.patch(
+  '/:id/complete',
+  authorize('inspector', 'admin'),
+  completeInspectionValidator,
+  validate,
+  ctrl.completeInspection
+);
 
 export default router;

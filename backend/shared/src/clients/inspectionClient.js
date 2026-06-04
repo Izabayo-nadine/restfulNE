@@ -1,3 +1,5 @@
+import { AppError } from '../utils/AppError.js';
+
 const INSPECTION_URL =
   process.env.INSPECTION_SERVICE_URL || 'http://localhost:5003';
 
@@ -20,12 +22,13 @@ export async function deleteInspectionsByExtinguishers(extinguisherIds, logger) 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       logger.warn('Inspection cascade delete failed', { status: res.status, text });
-      return { deletedCount: 0 };
+      throw new AppError('Failed to remove inspections for deleted extinguishers', 502);
     }
     const json = await res.json();
     return json.data || { deletedCount: 0 };
   } catch (err) {
+    if (err instanceof AppError) throw err;
     logger.warn('Inspection service unreachable for cascade delete', { error: err.message });
-    return { deletedCount: 0 };
+    throw new AppError('Inspection service unavailable; user was not deleted', 503);
   }
 }

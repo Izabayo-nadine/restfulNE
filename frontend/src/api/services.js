@@ -39,6 +39,7 @@ export const authApi = {
   listUsers: (params) => client.get("/auth/users", { params }),
   createInspector: (data) => client.post("/auth/users", data),
   updateUser: (id, data) => client.patch(`/auth/users/${id}`, data),
+  deleteUser: (id) => client.delete(`/auth/users/${id}`),
 };
 
 export const extinguisherApi = {
