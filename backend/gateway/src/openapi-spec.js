@@ -1,14 +1,16 @@
-/** Complete OpenAPI 3 spec for FEMS API Gateway (all proxied routes). */
+/** OpenAPI 3 spec for FEMS API Gateway — paths must match gateway proxies and microservice routes. */
 export const openApiSpec = {
   openapi: '3.0.0',
   info: {
     title: 'FEMS API Gateway — Microservices',
-    version: '2.0.0',
+    version: '2.1.0',
     description:
-      'Single entry point (port 5000) routing to: Auth (5001), Extinguisher (5002), Inspection (5003), Report (5004), Notification (5005). Click **Authorize** and use `Bearer <token>` after login.',
+      'Gateway (port 5000) → Auth :5001, Extinguisher :5002, Inspection :5003, Report :5004, Notification :5005. ' +
+      'Use **Authorize** with `Bearer <token>` from `POST /auth/login`. Facility registration uses OTP endpoints.',
   },
   servers: [{ url: 'http://localhost:5000/api/v1', description: 'API Gateway' }],
   tags: [
+    { name: 'Configuration', description: 'Public app config (enums, labels, pagination)' },
     { name: 'Authentication', description: 'auth-service :5001' },
     { name: 'Fire Extinguishers', description: 'extinguisher-service :5002' },
     { name: 'Inspections', description: 'inspection-service :5003' },
@@ -21,14 +23,30 @@ export const openApiSpec = {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
     },
     schemas: {
-      RegisterRequest: {
+      ApiSuccess: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string' },
+          data: { type: 'object' },
+        },
+      },
+      RegisterOtpRequest: {
         type: 'object',
         required: ['firstName', 'lastName', 'email', 'password'],
         properties: {
-          firstName: { type: 'string', example: 'John' },
-          lastName: { type: 'string', example: 'Doe' },
-          email: { type: 'string', format: 'email', example: 'user@tzw-ltd.com' },
+          firstName: { type: 'string', example: 'Jane' },
+          lastName: { type: 'string', example: 'Facility' },
+          email: { type: 'string', format: 'email', example: 'facility@company.com' },
           password: { type: 'string', format: 'password', example: 'User@12345' },
+        },
+      },
+      VerifyOtpRequest: {
+        type: 'object',
+        required: ['email', 'otp'],
+        properties: {
+          email: { type: 'string', format: 'email' },
+          otp: { type: 'string', minLength: 6, maxLength: 6, example: '123456' },
         },
       },
       LoginRequest: {
@@ -39,8 +57,27 @@ export const openApiSpec = {
           password: { type: 'string', example: 'Admin@12345' },
         },
       },
-      FireExtinguisher: {
+      CreateInspectorRequest: {
         type: 'object',
+        required: ['firstName', 'lastName', 'email', 'password'],
+        properties: {
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+          email: { type: 'string', format: 'email' },
+          password: { type: 'string', format: 'password' },
+        },
+      },
+      FireExtinguisherInput: {
+        type: 'object',
+        required: [
+          'serialNumber',
+          'location',
+          'type',
+          'size',
+          'installationDate',
+          'expiryDate',
+          'assignedTo',
+        ],
         properties: {
           serialNumber: { type: 'string', example: 'FE-001-A' },
           location: { type: 'string', example: 'Building A - Lobby' },
@@ -48,7 +85,15 @@ export const openApiSpec = {
           size: { type: 'string', enum: ['1.5 lb', '5 lb', '9 lb', '12 lb'] },
           installationDate: { type: 'string', format: 'date' },
           expiryDate: { type: 'string', format: 'date' },
-          status: { type: 'string', enum: ['active', 'inactive', 'maintenance', 'expired', 'decommissioned'] },
+          status: {
+            type: 'string',
+            enum: ['active', 'inactive', 'maintenance', 'expired', 'decommissioned'],
+            default: 'active',
+          },
+          assignedTo: {
+            type: 'string',
+            description: 'MongoDB ObjectId of facility user (company account)',
+          },
         },
       },
       ScheduleInspection: {
@@ -58,7 +103,16 @@ export const openApiSpec = {
           fireExtinguisher: { type: 'string', description: 'MongoDB ObjectId' },
           inspectionDate: { type: 'string', format: 'date' },
           inspectionTime: { type: 'string', example: '09:30', description: 'HH:mm 24h' },
-          assignedInspector: { type: 'string' },
+          assignedInspector: { type: 'string', description: 'Optional MongoDB ObjectId' },
+        },
+      },
+      CompleteInspection: {
+        type: 'object',
+        required: ['performedDate', 'result'],
+        properties: {
+          performedDate: { type: 'string', format: 'date', description: 'Date inspector performed the inspection' },
+          result: { type: 'string', example: 'Pass — pressure OK' },
+          notes: { type: 'string' },
         },
       },
       LogMaintenance: {
@@ -74,75 +128,133 @@ export const openApiSpec = {
       },
     },
     parameters: {
-      page: { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
-      limit: { name: 'limit', in: 'query', schema: { type: 'integer', default: 10 } },
-      id: { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      page: { name: 'page', in: 'query', schema: { type: 'integer', default: 1, minimum: 1 } },
+      limit: { name: 'limit', in: 'query', schema: { type: 'integer', default: 10, minimum: 1, maximum: 100 } },
+      id: { name: 'id', in: 'path', required: true, schema: { type: 'string', pattern: '^[a-f0-9]{24}$' } },
+    },
+    responses: {
+      Unauthorized: { description: 'Missing or invalid JWT' },
+      Forbidden: { description: 'Insufficient role' },
+      NotFound: { description: 'Resource not found' },
+      ValidationError: { description: 'Validation failed' },
     },
   },
   paths: {
-    '/auth/register': {
+    '/config': {
+      get: {
+        tags: ['Configuration'],
+        summary: 'Public application configuration',
+        description: 'Enums, dashboard cards, labels, pagination limits. No authentication required.',
+        security: [],
+        responses: {
+          200: {
+            description: 'Config payload',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/ApiSuccess' },
+                    { properties: { data: { type: 'object' } } },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/auth/register/send-otp': {
       post: {
         tags: ['Authentication'],
-        summary: 'Register a new user',
+        summary: 'Register facility user — send OTP email',
         security: [],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterRequest' } } },
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterOtpRequest' } } },
         },
-        responses: { 201: { description: 'User registered with JWT' }, 409: { description: 'Email already exists' } },
+        responses: {
+          200: { description: 'OTP sent (dev may return otp in body)' },
+          409: { description: 'Email already registered' },
+        },
+      },
+    },
+    '/auth/register/verify-otp': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Register facility user — verify OTP and create account',
+        security: [],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/VerifyOtpRequest' } } },
+        },
+        responses: {
+          201: { description: 'User created with JWT' },
+          400: { description: 'Invalid or expired OTP' },
+        },
       },
     },
     '/auth/login': {
       post: {
         tags: ['Authentication'],
-        summary: 'User login (returns JWT)',
+        summary: 'Login (returns JWT)',
         security: [],
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { $ref: '#/components/schemas/LoginRequest' } } },
         },
-        responses: { 200: { description: 'Login successful' }, 401: { description: 'Invalid credentials' } },
+        responses: {
+          200: { description: 'Login successful — copy `data.token` for Authorize' },
+          401: { description: 'Invalid credentials' },
+          403: { description: 'Account deactivated' },
+        },
       },
     },
     '/auth/logout': {
       post: {
         tags: ['Authentication'],
-        summary: 'Logout (invalidate token client-side)',
+        summary: 'Logout',
         security: [{ bearerAuth: [] }],
         responses: { 200: { description: 'Logged out' } },
       },
     },
-    '/auth/forgot-password': {
+    '/auth/forgot-password/send-otp': {
       post: {
         tags: ['Authentication'],
-        summary: 'Request password reset',
+        summary: 'Forgot password — send OTP',
         security: [],
         requestBody: {
+          required: true,
           content: {
             'application/json': {
-              schema: { type: 'object', properties: { email: { type: 'string', format: 'email' } } },
+              schema: { type: 'object', required: ['email'], properties: { email: { type: 'string', format: 'email' } } },
             },
           },
         },
-        responses: { 200: { description: 'Reset email sent if account exists' } },
+        responses: { 200: { description: 'OTP sent if account exists' } },
       },
     },
-    '/auth/reset-password': {
+    '/auth/forgot-password/reset': {
       post: {
         tags: ['Authentication'],
-        summary: 'Reset password with token',
+        summary: 'Forgot password — reset with OTP',
         security: [],
         requestBody: {
+          required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                properties: { token: { type: 'string' }, newPassword: { type: 'string' } },
+                required: ['email', 'otp', 'newPassword'],
+                properties: {
+                  email: { type: 'string', format: 'email' },
+                  otp: { type: 'string', minLength: 6, maxLength: 6 },
+                  newPassword: { type: 'string', format: 'password' },
+                },
               },
             },
           },
         },
-        responses: { 200: { description: 'Password reset' } },
+        responses: { 200: { description: 'Password reset' }, 400: { description: 'Invalid OTP' } },
       },
     },
     '/auth/profile': {
@@ -150,7 +262,7 @@ export const openApiSpec = {
         tags: ['Authentication'],
         summary: 'Get current user profile',
         security: [{ bearerAuth: [] }],
-        responses: { 200: { description: 'Profile data' } },
+        responses: { 200: { description: 'Profile' }, 401: { $ref: '#/components/responses/Unauthorized' } },
       },
       patch: {
         tags: ['Authentication'],
@@ -164,7 +276,7 @@ export const openApiSpec = {
                 properties: {
                   firstName: { type: 'string' },
                   lastName: { type: 'string' },
-                  email: { type: 'string' },
+                  email: { type: 'string', format: 'email' },
                 },
               },
             },
@@ -179,11 +291,16 @@ export const openApiSpec = {
         summary: 'Change password',
         security: [{ bearerAuth: [] }],
         requestBody: {
+          required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                properties: { currentPassword: { type: 'string' }, newPassword: { type: 'string' } },
+                required: ['currentPassword', 'newPassword'],
+                properties: {
+                  currentPassword: { type: 'string' },
+                  newPassword: { type: 'string' },
+                },
               },
             },
           },
@@ -201,15 +318,15 @@ export const openApiSpec = {
           { $ref: '#/components/parameters/limit' },
           { name: 'role', in: 'query', schema: { type: 'string', enum: ['admin', 'inspector', 'user'] } },
         ],
-        responses: { 200: { description: 'Paginated users' } },
+        responses: { 200: { description: 'Paginated users' }, 403: { $ref: '#/components/responses/Forbidden' } },
       },
       post: {
         tags: ['Authentication'],
-        summary: 'Register inspector (admin only)',
+        summary: 'Create inspector account (admin)',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterRequest' } } },
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateInspectorRequest' } } },
         },
         responses: { 201: { description: 'Inspector created' }, 409: { description: 'Email exists' } },
       },
@@ -217,7 +334,8 @@ export const openApiSpec = {
     '/auth/users/{id}': {
       patch: {
         tags: ['Authentication'],
-        summary: 'Update user role / status (admin)',
+        summary: 'Update user active status (admin)',
+        description: 'Only `isActive` can be changed. Roles are not editable here.',
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: '#/components/parameters/id' }],
         requestBody: {
@@ -225,39 +343,57 @@ export const openApiSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                properties: {
-                  role: { type: 'string', enum: ['admin', 'inspector', 'user'] },
-                  isActive: { type: 'boolean' },
-                },
+                properties: { isActive: { type: 'boolean' } },
               },
             },
           },
         },
-        responses: { 200: { description: 'User updated' } },
+        responses: { 200: { description: 'User updated' }, 403: { description: 'Cannot modify admin' } },
+      },
+      delete: {
+        tags: ['Authentication'],
+        summary: 'Delete facility company user (admin)',
+        description:
+          'Only `role: user` (facility company). Cascades: all assigned extinguishers and their inspections are removed.',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ $ref: '#/components/parameters/id' }],
+        responses: {
+          200: { description: 'User and related data deleted' },
+          400: { description: 'Cannot delete admin/inspector' },
+          502: { description: 'Cascade delete failed — user not removed' },
+        },
       },
     },
     '/extinguishers': {
       get: {
         tags: ['Fire Extinguishers'],
-        summary: 'List all fire extinguishers (paginated)',
+        summary: 'List fire extinguishers (paginated)',
+        description: 'Facility users see only extinguishers assigned to them. Admin/inspector see all.',
         security: [{ bearerAuth: [] }],
         parameters: [
           { $ref: '#/components/parameters/page' },
           { $ref: '#/components/parameters/limit' },
-          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Serial, location, or company email' },
           { name: 'status', in: 'query', schema: { type: 'string' } },
+          {
+            name: 'assignedTo',
+            in: 'query',
+            schema: { type: 'string' },
+            description: 'Filter by facility user ObjectId (admin)',
+          },
         ],
         responses: { 200: { description: 'Paginated list' } },
       },
       post: {
         tags: ['Fire Extinguishers'],
-        summary: 'Register new fire extinguisher (admin/inspector)',
+        summary: 'Register extinguisher (admin)',
+        description: 'Must assign to a facility user (`assignedTo`). Stores company snapshot on the record.',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/FireExtinguisher' } } },
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/FireExtinguisherInput' } } },
         },
-        responses: { 201: { description: 'Created' } },
+        responses: { 201: { description: 'Created' }, 400: { $ref: '#/components/responses/ValidationError' } },
       },
     },
     '/extinguishers/{id}': {
@@ -266,15 +402,15 @@ export const openApiSpec = {
         summary: 'Get extinguisher by ID',
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: '#/components/parameters/id' }],
-        responses: { 200: { description: 'Details' }, 404: { description: 'Not found' } },
+        responses: { 200: { description: 'Details' }, 404: { $ref: '#/components/responses/NotFound' } },
       },
       patch: {
         tags: ['Fire Extinguishers'],
-        summary: 'Update extinguisher (admin/inspector)',
+        summary: 'Update extinguisher (admin)',
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: '#/components/parameters/id' }],
         requestBody: {
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/FireExtinguisher' } } },
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/FireExtinguisherInput' } } },
         },
         responses: { 200: { description: 'Updated' } },
       },
@@ -294,13 +430,19 @@ export const openApiSpec = {
         parameters: [
           { $ref: '#/components/parameters/page' },
           { $ref: '#/components/parameters/limit' },
-          { name: 'status', in: 'query', schema: { type: 'string' } },
+          {
+            name: 'status',
+            in: 'query',
+            schema: { type: 'string', enum: ['not_started', 'completed'] },
+          },
+          { name: 'fireExtinguisher', in: 'query', schema: { type: 'string' }, description: 'Filter by extinguisher id' },
         ],
         responses: { 200: { description: 'Paginated list' } },
       },
       post: {
         tags: ['Inspections'],
-        summary: 'Schedule inspection (notifies inspectors)',
+        summary: 'Schedule inspection',
+        description: 'Creates status `not_started`. Notifies inspectors and admin.',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
@@ -315,27 +457,20 @@ export const openApiSpec = {
         summary: 'Get inspection by ID',
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: '#/components/parameters/id' }],
-        responses: { 200: { description: 'Details' } },
+        responses: { 200: { description: 'Details' }, 404: { $ref: '#/components/responses/NotFound' } },
       },
     },
     '/inspections/{id}/complete': {
       patch: {
         tags: ['Inspections'],
-        summary: 'Complete inspection (inspector/admin)',
+        summary: 'Complete inspection (inspector or admin)',
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: '#/components/parameters/id' }],
         requestBody: {
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['result'],
-                properties: { result: { type: 'string' }, notes: { type: 'string' } },
-              },
-            },
-          },
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/CompleteInspection' } } },
         },
-        responses: { 200: { description: 'Completed' } },
+        responses: { 200: { description: 'Completed' }, 400: { $ref: '#/components/responses/ValidationError' } },
       },
     },
     '/maintenance': {
@@ -348,7 +483,7 @@ export const openApiSpec = {
       },
       post: {
         tags: ['Maintenance'],
-        summary: 'Log maintenance (inspector/admin)',
+        summary: 'Log maintenance (inspector or admin)',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
@@ -363,7 +498,16 @@ export const openApiSpec = {
         summary: 'Get maintenance record by ID',
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: '#/components/parameters/id' }],
-        responses: { 200: { description: 'Details' } },
+        responses: { 200: { description: 'Details' }, 404: { $ref: '#/components/responses/NotFound' } },
+      },
+    },
+    '/reports/dashboard': {
+      get: {
+        tags: ['Reports'],
+        summary: 'Role-scoped dashboard stats',
+        description: 'MongoDB-backed KPIs and preview lists for admin, inspector, or facility user.',
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: 'Dashboard payload' } },
       },
     },
     '/reports/inventory': {
@@ -384,17 +528,17 @@ export const openApiSpec = {
     '/reports/inspections': {
       get: {
         tags: ['Reports'],
-        summary: 'Inspection report (pending/completed/overdue)',
+        summary: 'Inspection report summary',
         security: [{ bearerAuth: [] }],
-        responses: { 200: { description: 'Inspection stats' } },
+        responses: { 200: { description: 'Pending, completed, overdue counts and upcoming list' } },
       },
     },
     '/reports/compliance': {
       get: {
         tags: ['Reports'],
-        summary: 'Compliance report (expired/upcoming)',
+        summary: 'Compliance report',
         security: [{ bearerAuth: [] }],
-        responses: { 200: { description: 'Compliance data' } },
+        responses: { 200: { description: 'Compliance rate, expired and expiring units' } },
       },
     },
     '/reports/maintenance': {
@@ -403,13 +547,14 @@ export const openApiSpec = {
         summary: 'Maintenance report',
         security: [{ bearerAuth: [] }],
         parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }],
-        responses: { 200: { description: 'Maintenance history' } },
+        responses: { 200: { description: 'Maintenance history summary' } },
       },
     },
     '/reports/export': {
       get: {
         tags: ['Reports'],
-        summary: 'Export report as PDF or CSV (admin/inspector)',
+        summary: 'Export report as PDF or CSV',
+        description: 'Admin and inspector only. Returns file bytes.',
         security: [{ bearerAuth: [] }],
         parameters: [
           {
@@ -420,7 +565,10 @@ export const openApiSpec = {
           },
           { name: 'format', in: 'query', required: true, schema: { type: 'string', enum: ['pdf', 'csv'] } },
         ],
-        responses: { 200: { description: 'File download' } },
+        responses: {
+          200: { description: 'File download', content: { 'application/pdf': {}, 'text/csv': {} } },
+          403: { $ref: '#/components/responses/Forbidden' },
+        },
       },
     },
     '/notifications': {
@@ -434,6 +582,14 @@ export const openApiSpec = {
           { name: 'unread', in: 'query', schema: { type: 'string', enum: ['true'] } },
         ],
         responses: { 200: { description: 'Paginated notifications' } },
+      },
+    },
+    '/notifications/unread-count': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Unread notification count',
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: 'Count in data' } },
       },
     },
     '/notifications/read-all': {
