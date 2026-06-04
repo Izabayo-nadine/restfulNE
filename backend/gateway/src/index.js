@@ -11,6 +11,7 @@ import rateLimit from 'express-rate-limit';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger.js';
+import { getPublicConfig } from '@fems/shared';
 
 const PORT = process.env.GATEWAY_PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -42,6 +43,10 @@ app.use(
     message: { success: false, message: 'Too many requests' },
   })
 );
+
+app.get('/api/v1/config', (_req, res) => {
+  res.json({ success: true, data: getPublicConfig() });
+});
 
 app.get('/health', async (_req, res) => {
   const checks = await Promise.all(
@@ -94,10 +99,12 @@ function createServiceProxy(target, pathRewrite) {
     onError: (err, req, res) => {
       console.error('[gateway] proxy error', req.method, req.url, err.message);
       if (!res.headersSent) {
-        res.status(502).json({
+        const refused = err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND';
+        res.status(refused ? 503 : 502).json({
           success: false,
-          message:
-            'Service unavailable. Restart backend (npm run dev) and ensure all microservices are running.',
+          message: refused
+            ? 'Service is not running. In the backend folder run: npm run dev'
+            : 'Service unavailable. Restart backend (npm run dev) and ensure all microservices are running.',
         });
       }
     },

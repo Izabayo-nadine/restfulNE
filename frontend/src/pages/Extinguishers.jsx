@@ -2,39 +2,32 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { extinguisherApi } from '../api/services';
 import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
 import Pagination from '../components/Pagination';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Alert, { FieldErrors } from '../components/Alert';
-
-const TYPES = ['Water', 'CO₂', 'Foam', 'Dry Chemical'];
-const SIZES = ['1.5 lb', '5 lb', '9 lb', '12 lb'];
-const STATUSES = ['active', 'inactive', 'maintenance', 'expired', 'decommissioned'];
-
-const emptyForm = {
-  serialNumber: '',
-  location: '',
-  type: 'CO₂',
-  size: '5 lb',
-  installationDate: '',
-  expiryDate: '',
-  status: 'active',
-};
+import { emptyExtinguisherForm } from '../utils/forms';
 
 export default function Extinguishers() {
   const { hasRole } = useAuth();
+  const { config } = useConfig();
+  const pageLimit = config?.pagination?.defaultLimit ?? 10;
+  const types = config?.extinguisher?.types ?? [];
+  const sizes = config?.extinguisher?.sizes ?? [];
+  const statuses = config?.extinguisher?.statuses ?? [];
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => emptyExtinguisherForm(config));
   const [deleteId, setDeleteId] = useState(null);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState(null);
 
   const load = () => {
     extinguisherApi
-      .list({ page, limit: 10, search: search || undefined })
+      .list({ page, limit: pageLimit, search: search || undefined })
       .then((res) => {
         setItems(res.data.data);
         setPagination(res.data.pagination);
@@ -44,10 +37,10 @@ export default function Extinguishers() {
 
   useEffect(() => {
     load();
-  }, [page, search]);
+  }, [page, search, pageLimit]);
 
   const openCreate = () => {
-    setForm(emptyForm);
+    setForm(emptyExtinguisherForm(config));
     setModal('create');
     setError(null);
     setFieldErrors(null);
@@ -213,13 +206,13 @@ export default function Extinguishers() {
                 <div>
                   <label className="label">Type</label>
                   <select className="input-field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                    {TYPES.map((t) => <option key={t}>{t}</option>)}
+                    {types.map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="label">Size</label>
                   <select className="input-field" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })}>
-                    {SIZES.map((s) => <option key={s}>{s}</option>)}
+                    {sizes.map((s) => <option key={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
@@ -236,7 +229,7 @@ export default function Extinguishers() {
               <div>
                 <label className="label">Status</label>
                 <select className="input-field" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">

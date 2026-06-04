@@ -4,6 +4,10 @@ import Maintenance from '../models/Maintenance.js';
 import PDFDocument from 'pdfkit';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { getPagination, paginatedResponse } from '../utils/pagination.js';
+import {
+  getComplianceTargetPercent,
+  getExpiryWarningDays,
+} from '../../shared/src/config/appConfig.js';
 import { markOverdueInspections } from './inspectionController.js';
 
 function startOfDay(d) {
@@ -76,11 +80,13 @@ export const inspectionReport = asyncHandler(async (req, res) => {
 
 export const complianceReport = asyncHandler(async (req, res) => {
   const now = new Date();
-  const thirtyDays = new Date();
-  thirtyDays.setDate(thirtyDays.getDate() + 30);
+  const complianceTargetPercent = getComplianceTargetPercent();
+  const expiryWarningDays = getExpiryWarningDays();
+  const warningEnd = new Date();
+  warningEnd.setDate(warningEnd.getDate() + expiryWarningDays);
   const [expired, upcoming, active] = await Promise.all([
     FireExtinguisher.find({ expiryDate: { $lt: now } }).select('serialNumber location expiryDate status'),
-    FireExtinguisher.find({ expiryDate: { $gte: now, $lte: thirtyDays } }).select('serialNumber location expiryDate'),
+    FireExtinguisher.find({ expiryDate: { $gte: now, $lte: warningEnd } }).select('serialNumber location expiryDate'),
     FireExtinguisher.countDocuments({ status: 'active', expiryDate: { $gte: now } }),
   ]);
   const total = await FireExtinguisher.countDocuments();
@@ -92,7 +98,9 @@ export const complianceReport = asyncHandler(async (req, res) => {
       expired,
       upcomingExpirations: upcoming,
       complianceRate,
-      complianceStatus: complianceRate >= 80 ? 'compliant' : 'at_risk',
+      complianceTargetPercent,
+      expiryWarningDays,
+      complianceStatus: complianceRate >= complianceTargetPercent ? 'compliant' : 'at_risk',
       generatedAt: new Date(),
     },
   });
@@ -176,7 +184,8 @@ export const exportReport = asyncHandler(async (req, res) => {
     title = 'Compliance Report';
     headers = ['Serial', 'Location', 'Expiry', 'Status'];
     const now = new Date();
-    const items = await FireExtinguisher.find({ expiryDate: { $lte: new Date(now.getTime() + 30 * 86400000) } });
+    const warningEnd = new Date(now.getTime() + getExpiryWarningDays() * 86400000);
+    const items = await FireExtinguisher.find({ expiryDate: { $lte: warningEnd } });
     rows = items.map((e) => [
       e.serialNumber,
       e.location,

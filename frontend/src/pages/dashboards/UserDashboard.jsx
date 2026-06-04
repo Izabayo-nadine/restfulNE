@@ -1,37 +1,62 @@
 import { Link } from 'react-router-dom';
-import { Flame, ClipboardCheck, Eye } from 'lucide-react';
+import { Eye } from 'lucide-react';
+import { useConfig } from '../../context/ConfigContext';
+import { DashboardReportSummary } from '../../components/reports/ReportDisplay';
+import { DashboardIcon, formatDashboardStat } from '../../utils/dashboardIcons';
 
-export default function UserDashboard({ stats, loading }) {
+function StatCardSkeleton() {
+  return (
+    <div className="card flex animate-pulse items-center gap-4">
+      <div className="h-12 w-12 rounded-xl bg-slate-200" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3 w-24 rounded bg-slate-200" />
+        <div className="h-8 w-16 rounded bg-slate-200" />
+      </div>
+    </div>
+  );
+}
+
+export default function UserDashboard({ stats, reports, loading }) {
+  const { config } = useConfig();
+  const dash = config.dashboard.user;
+  const cards = dash.cards;
+
   return (
     <div>
-      <h2 className="text-2xl font-bold text-slate-900">My dashboard</h2>
-      <p className="mt-1 text-slate-600">
-        View fire extinguisher status and schedule inspections for your facility.
-      </p>
-      {loading ? (
-        <p className="mt-8 text-slate-500">Loading...</p>
-      ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          <Link to="/extinguishers" className="card flex items-center gap-4 transition hover:shadow-md">
-            <div className="rounded-xl bg-red-50 p-3 text-red-700">
-              <Flame className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-600">Extinguishers available</p>
-              <p className="text-2xl font-bold">{stats?.total ?? '—'}</p>
-            </div>
-          </Link>
-          <Link to="/inspections" className="card flex items-center gap-4 transition hover:shadow-md">
-            <div className="rounded-xl bg-amber-50 p-3 text-amber-700">
-              <ClipboardCheck className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-600">Scheduled inspections</p>
-              <p className="text-2xl font-bold">{stats?.pending ?? '—'}</p>
-            </div>
-          </Link>
+      <h2 className="text-2xl font-bold text-slate-900">{dash.title}</h2>
+      <p className="mt-1 text-slate-600">{dash.subtitle}</p>
+
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        {loading
+          ? cards.map((card) => <StatCardSkeleton key={card.id} />)
+          : cards.map((card) => (
+              <Link
+                key={card.id}
+                to={card.href}
+                className="card flex items-center gap-4 transition hover:shadow-md"
+              >
+                <div className={`rounded-xl p-3 ${card.color}`}>
+                  <DashboardIcon name={card.icon} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600">{card.label}</p>
+                  <p className="text-2xl font-bold">{formatDashboardStat(card, stats)}</p>
+                </div>
+              </Link>
+            ))}
+      </div>
+
+      {!loading && reports && (
+        <div className="mt-8">
+          <DashboardReportSummary
+            inventory={reports.inventory}
+            inspections={reports.inspections}
+            compliance={null}
+            variant="user"
+          />
         </div>
       )}
+
       <div className="mt-8 card border-brand-100 bg-brand-50/30">
         <div className="flex items-start gap-3">
           <Eye className="mt-0.5 h-5 w-5 text-brand-600" />

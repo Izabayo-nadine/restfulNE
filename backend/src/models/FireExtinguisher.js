@@ -1,14 +1,11 @@
 import mongoose from 'mongoose';
+import {
+  EXTINGUISHER_TYPES,
+  EXTINGUISHER_SIZES,
+  EXTINGUISHER_STATUSES,
+} from '../../shared/src/config/appConfig.js';
 
-export const EXTINGUISHER_TYPES = ['Water', 'CO₂', 'Foam', 'Dry Chemical'];
-export const EXTINGUISHER_SIZES = ['1.5 lb', '5 lb', '9 lb', '12 lb'];
-export const EXTINGUISHER_STATUSES = [
-  'active',
-  'inactive',
-  'maintenance',
-  'expired',
-  'decommissioned',
-];
+export { EXTINGUISHER_TYPES, EXTINGUISHER_SIZES, EXTINGUISHER_STATUSES };
 
 const fireExtinguisherSchema = new mongoose.Schema(
   {

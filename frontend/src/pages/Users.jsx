@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { UserPlus } from 'lucide-react';
 import { authApi } from '../api/services';
+import { useConfig } from '../context/ConfigContext';
 import Pagination from '../components/Pagination';
 import Alert, { FieldErrors } from '../components/Alert';
 import PasswordField from '../components/PasswordField';
@@ -13,6 +14,9 @@ const emptyInspector = {
 };
 
 export default function Users() {
+  const { config } = useConfig();
+  const pageLimit = config?.pagination?.defaultLimit ?? 10;
+  const roleLabels = config?.auth?.roleLabels ?? {};
   const [users, setUsers] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [page, setPage] = useState(1);
@@ -23,7 +27,7 @@ export default function Users() {
   const [message, setMessage] = useState(null);
 
   const load = () => {
-    authApi.listUsers({ page, limit: 10 }).then((res) => {
+    authApi.listUsers({ page, limit: pageLimit }).then((res) => {
       setUsers(res.data.data);
       setPagination(res.data.pagination);
     });
@@ -31,7 +35,7 @@ export default function Users() {
 
   useEffect(() => {
     load();
-  }, [page]);
+  }, [page, pageLimit]);
 
   const toggleActive = async (id, isActive) => {
     await authApi.updateUser(id, { isActive });
@@ -62,7 +66,7 @@ export default function Users() {
     };
     return (
       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${styles[role] || styles.user}`}>
-        {role}
+        {roleLabels[role] || role}
       </span>
     );
   };

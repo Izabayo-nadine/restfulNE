@@ -22,6 +22,7 @@ export const scheduleInspection = asyncHandler(async (req, res) => {
     inspectionTime: req.body.inspectionTime,
     assignedInspector: req.body.assignedInspector,
     scheduledBy: req.user._id,
+    status: 'scheduled',
     extinguisherSnapshot: {
       serialNumber: extinguisher.serialNumber,
       location: extinguisher.location,
@@ -35,7 +36,6 @@ export const scheduleInspection = asyncHandler(async (req, res) => {
     type: 'inspection',
     relatedId: inspection._id.toString(),
   };
-  // Notify in background so scheduling responds even if notification service is slow
   const notifyTasks = [
     notifyRole({ role: 'inspector', ...notifyPayload }, req.logger),
     notifyRole({ role: 'admin', ...notifyPayload }, req.logger),
@@ -57,6 +57,9 @@ export const scheduleInspection = asyncHandler(async (req, res) => {
 export const listInspections = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
   const filter = {};
+  if (req.user.role === 'user') {
+    filter.scheduledBy = req.user._id;
+  }
   if (req.query.status) filter.status = req.query.status;
   if (req.query.fireExtinguisher) filter.fireExtinguisher = req.query.fireExtinguisher;
   const [data, total] = await Promise.all([
@@ -75,24 +78,28 @@ export const getInspection = asyncHandler(async (req, res) => {
 export const completeInspection = asyncHandler(async (req, res) => {
   const inspection = await Inspection.findById(req.params.id);
   if (!inspection) throw new AppError('Inspection not found', 404);
-  if (!['inspector', 'admin'].includes(req.user.role)) {
-    throw new AppError('Only inspectors can complete inspections', 403);
+  if (inspection.status === 'completed') {
+    throw new AppError('Inspection is already completed', 400);
+  }
+  const performedDate = new Date(req.body.performedDate);
+  if (Number.isNaN(performedDate.getTime())) {
+    throw new AppError('Invalid performed date', 400);
   }
   inspection.status = 'completed';
+  inspection.performedDate = performedDate;
   inspection.result = req.body.result;
   inspection.notes = req.body.notes;
-  inspection.completedAt = new Date();
+  inspection.completedAt = performedDate;
   inspection.assignedInspector = req.user._id;
   await inspection.save();
   res.json({ success: true, message: 'Inspection completed', data: inspection });
 });
 
-export async function markOverdueInspections(logger) {
-  const now = new Date();
-  const result = await Inspection.updateMany(
-    { status: 'scheduled', inspectionDate: { $lt: now } },
-    { $set: { status: 'overdue' } }
-  );
-  if (result.modifiedCount) logger.info('Marked overdue inspections', { count: result.modifiedCount });
-  return result.modifiedCount;
-}
+export const deleteByExtinguishers = asyncHandler(async (req, res) => {
+  const ids = req.body.extinguisherIds || [];
+  if (!ids.length) {
+    return res.json({ success: true, data: { deletedCount: 0 } });
+  }
+  const result = await Inspection.deleteMany({ fireExtinguisher: { $in: ids } });
+  res.json({ success: true, data: { deletedCount: result.deletedCount } });
+});

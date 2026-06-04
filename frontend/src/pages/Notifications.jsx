@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { notificationApi } from '../api/services';
+import { useConfig } from '../context/ConfigContext';
 import Pagination from '../components/Pagination';
 import Alert from '../components/Alert';
 
 export default function Notifications() {
+  const { config } = useConfig();
+  const pageLimit = config?.pagination?.defaultLimit ?? 10;
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [page, setPage] = useState(1);
@@ -14,7 +17,7 @@ export default function Notifications() {
     setLoading(true);
     setError(null);
     notificationApi
-      .list({ page, limit: 10 })
+      .list({ page, limit: pageLimit })
       .then((res) => {
         setItems(res.data.data || []);
         setPagination(res.data.pagination);
@@ -25,7 +28,7 @@ export default function Notifications() {
 
   useEffect(() => {
     load();
-  }, [page]);
+  }, [page, pageLimit]);
 
   const markRead = async (id) => {
     try {

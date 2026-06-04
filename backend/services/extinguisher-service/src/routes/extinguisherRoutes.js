@@ -12,8 +12,8 @@ router.use(protect);
 
 router.get('/', ctrl.listExtinguishers);
 router.get('/:id', mongoIdParam, validate, ctrl.getExtinguisher);
-router.post('/', authorize('admin', 'inspector'), createExtinguisherValidator, validate, ctrl.createExtinguisher);
-router.patch('/:id', authorize('admin', 'inspector'), updateExtinguisherValidator, validate, ctrl.updateExtinguisher);
-router.delete('/:id', authorize('admin'), mongoIdParam, validate, ctrl.deleteExtinguisher);
+router.post('/', authorize('inspector'), createExtinguisherValidator, validate, ctrl.createExtinguisher);
+router.patch('/:id', authorize('inspector'), updateExtinguisherValidator, validate, ctrl.updateExtinguisher);
+router.delete('/:id', authorize('inspector'), mongoIdParam, validate, ctrl.deleteExtinguisher);
 
 export default router;

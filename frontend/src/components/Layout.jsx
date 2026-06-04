@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
 import ConfirmDialog from './ConfirmDialog';
 
 const NAV_ITEMS = {
@@ -48,6 +49,8 @@ const NAV_ITEMS = {
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { config } = useConfig();
+  const roleLabels = config?.auth?.roleLabels ?? {};
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -67,12 +70,6 @@ export default function Layout() {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
-  };
-
-  const roleTitles = {
-    admin: 'Administrator',
-    inspector: 'Inspector',
-    user: 'Facility User',
   };
 
   return (
@@ -116,7 +113,7 @@ export default function Layout() {
         </nav>
         <div className="absolute bottom-0 left-0 right-0 border-t border-brand-800 p-4">
           <p className="truncate text-xs text-brand-300">{user?.email}</p>
-          <p className="text-sm font-medium">{roleTitles[user?.role] || user?.role}</p>
+          <p className="text-sm font-medium">{roleLabels[user?.role] || user?.role}</p>
           <button
             type="button"
             className="mt-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-brand-100 hover:bg-brand-800"
@@ -143,7 +140,7 @@ export default function Layout() {
             <Menu className="h-6 w-6" />
           </button>
           <h1 className="text-lg font-semibold text-slate-800">
-            {roleTitles[user?.role] || 'FEMS'} — {user?.firstName} {user?.lastName}
+            {roleLabels[user?.role] || 'FEMS'} — {user?.firstName} {user?.lastName}
           </h1>
         </header>
         <main className="flex-1 p-4 lg:p-8">

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { maintenanceApi, extinguisherApi } from '../api/services';
+import { maintenanceApi, fetchAllPages, extinguisherApi } from '../api/services';
 import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
+import { emptyMaintenanceForm } from '../utils/forms';
 import Pagination from '../components/Pagination';
 import Alert, { FieldErrors } from '../components/Alert';
 
@@ -22,25 +24,22 @@ function formatPerformer(record) {
 
 export default function Maintenance() {
   const { hasRole } = useAuth();
+  const { config } = useConfig();
+  const pageLimit = config?.pagination?.defaultLimit ?? 10;
+  const listAllLimit = config?.pagination?.maxLimit ?? 100;
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [page, setPage] = useState(1);
   const [extinguishers, setExtinguishers] = useState([]);
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({
-    fireExtinguisher: '',
-    actionTaken: '',
-    maintenanceDate: '',
-    issuesIdentified: '',
-    notesAndRecommendations: '',
-  });
+  const [form, setForm] = useState(emptyMaintenanceForm);
   const [fieldErrors, setFieldErrors] = useState(null);
   const [error, setError] = useState(null);
 
   const load = () => {
     setError(null);
     maintenanceApi
-      .list({ page, limit: 10 })
+      .list({ page, limit: pageLimit })
       .then((res) => {
         setItems(res.data.data || []);
         setPagination(res.data.pagination);
@@ -53,28 +52,18 @@ export default function Maintenance() {
 
   useEffect(() => {
     load();
-    extinguisherApi.list({ page: 1, limit: 100 }).then((res) => setExtinguishers(res.data.data));
-  }, [page]);
+    fetchAllPages(extinguisherApi.list, { limit: listAllLimit })
+      .then(setExtinguishers)
+      .catch(() => setExtinguishers([]));
+  }, [page, listAllLimit]);
 
   const submit = async (e) => {
     e.preventDefault();
     setError(null);
     try {
-      const payload = {
-        ...form,
-        maintenanceDate: form.maintenanceDate.includes('T')
-          ? form.maintenanceDate
-          : `${form.maintenanceDate}T12:00:00.000Z`,
-      };
-      await maintenanceApi.log(payload);
+      await maintenanceApi.log(form);
       setModal(false);
-      setForm({
-        fireExtinguisher: '',
-        actionTaken: '',
-        maintenanceDate: '',
-        issuesIdentified: '',
-        notesAndRecommendations: '',
-      });
+      setForm(emptyMaintenanceForm());
       setPage(1);
       load();
     } catch (err) {

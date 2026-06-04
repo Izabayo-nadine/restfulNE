@@ -7,7 +7,12 @@ import {
   hashResetToken,
   getPagination,
   paginatedResponse,
+  deleteExtinguishersByUser,
+  deleteInspectionsByExtinguishers,
+  createServiceLogger,
 } from '@fems/shared';
+
+const logger = createServiceLogger('auth-service');
 
 const tokenBlacklist = new Set();
 
@@ -145,6 +150,30 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (typeof req.body.isActive === 'boolean') user.isActive = req.body.isActive;
   await user.save();
   res.json({ success: true, message: 'User updated', data: user });
+});
+
+/** Admin deletes a facility user (company); cascades to their extinguishers and inspections */
+export const deleteUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw new AppError('User not found', 404);
+  if (user.role === 'admin') throw new AppError('Admin accounts cannot be deleted', 403);
+  if (user.role === 'inspector') {
+    throw new AppError('Use deactivation for inspector accounts. Only facility users can be deleted.', 400);
+  }
+
+  const { deletedCount, extinguisherIds } = await deleteExtinguishersByUser(user._id.toString(), logger);
+  const inspResult = await deleteInspectionsByExtinguishers(extinguisherIds, logger);
+
+  await User.findByIdAndDelete(user._id);
+
+  res.json({
+    success: true,
+    message: `User deleted. Removed ${deletedCount} extinguisher(s) and ${inspResult.deletedCount} inspection(s).`,
+    data: {
+      extinguishersRemoved: deletedCount,
+      inspectionsRemoved: inspResult.deletedCount,
+    },
+  });
 });
 
 /** Internal: resolve users by role for notification service */

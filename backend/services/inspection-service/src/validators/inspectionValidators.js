@@ -15,6 +15,13 @@ export const scheduleInspectionValidator = [
 
 export const completeInspectionValidator = [
   param('id').isMongoId(),
+  body('performedDate')
+    .notEmpty()
+    .custom((value) => {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) throw new Error('Invalid performed date');
+      return true;
+    }),
   body('result').trim().notEmpty(),
   body('notes').optional().trim(),
 ];

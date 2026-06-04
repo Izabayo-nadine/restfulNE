@@ -60,5 +60,13 @@ router.patch(
   validate,
   ctrl.updateUser
 );
+router.delete(
+  '/users/:id',
+  protect,
+  authorize('admin'),
+  [param('id').isMongoId()],
+  validate,
+  ctrl.deleteUser
+);
 
 export default router;

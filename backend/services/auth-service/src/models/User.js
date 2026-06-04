@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-const ROLES = ['admin', 'inspector', 'user'];
+import { USER_ROLES } from '@fems/shared';
+
+const ROLES = USER_ROLES;
 
 const userSchema = new mongoose.Schema(
   {
@@ -44,5 +46,5 @@ userSchema.methods.toJSON = function toJSON() {
   return obj;
 };
 
-export const USER_ROLES = ROLES;
+export { USER_ROLES };
 export default mongoose.model('User', userSchema);

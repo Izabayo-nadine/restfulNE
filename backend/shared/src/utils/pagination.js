@@ -1,6 +1,9 @@
+import { getPaginationDefaults } from '../config/appConfig.js';
+
 export function getPagination(query) {
+  const { defaultLimit, maxLimit } = getPaginationDefaults();
   const page = Math.max(1, parseInt(query.page, 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 10));
+  const limit = Math.min(maxLimit, Math.max(1, parseInt(query.limit, 10) || defaultLimit));
   const skip = (page - 1) * limit;
   return { page, limit, skip };
 }

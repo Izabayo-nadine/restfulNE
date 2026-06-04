@@ -1,6 +1,7 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
+import { INSPECTION_STATUSES } from "@fems/shared";
 
-export const INSPECTION_STATUSES = ['scheduled', 'completed', 'cancelled', 'overdue'];
+export { INSPECTION_STATUSES };
 
 /** Nested schema — avoid a field named `type` (Mongoose treats it as the path type). */
 const extinguisherSnapshotSchema = new mongoose.Schema(
@@ -9,7 +10,7 @@ const extinguisherSnapshotSchema = new mongoose.Schema(
     location: String,
     unitType: String,
   },
-  { _id: false }
+  { _id: false },
 );
 
 const schema = new mongoose.Schema(
@@ -19,15 +20,15 @@ const schema = new mongoose.Schema(
     assignedInspector: { type: mongoose.Schema.Types.ObjectId },
     inspectionDate: { type: Date, required: true },
     inspectionTime: { type: String, required: true },
-    status: { type: String, enum: INSPECTION_STATUSES, default: 'scheduled' },
+    status: { type: String, enum: INSPECTION_STATUSES, default: "scheduled" },
     result: String,
     notes: String,
     completedAt: Date,
     extinguisherSnapshot: extinguisherSnapshotSchema,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 schema.index({ status: 1, inspectionDate: 1 });
 
-export default mongoose.model('Inspection', schema);
+export default mongoose.model("Inspection", schema);
